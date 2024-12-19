@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bird Game</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #1a1a2e;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            background: #4a90e2;
+            border: 2px solid white;
+        }
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+        }
+        .power-button {
+            display: block;
+            margin: 5px;
+            padding: 10px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            width: 150px;
+        }
+        .power-button:disabled {
+            background: #666;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div class="controls">
+        <button onclick="activatePower('shield')" id="shieldBtn" class="power-button">Shield [S]</button>
+        <button onclick="activatePower('slow')" id="slowBtn" class="power-button">Time Slow [D]</button>
+        <button onclick="activatePower('fire')" id="fireBtn" class="power-button">Fire Mode [F]</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game variables
+        let bird = {
+            x: 150,
+            y: 300,
+            velocity: 0,
+            radius: 20,
+            shield: false,
+            fire: false,
+            slow: false
+        };
+
+        let pipes = [];
+        let score = 0;
+        let gameActive = false;
+
+        // Constants
+        const GRAVITY = 0.25;
+        const JUMP = -6;
+        const PIPE_SPEED = 2;
+        const PIPE_WIDTH = 70;
+        const PIPE_GAP = 200;
+
+        // Power-ups
+        let powerUps = {
+            shield: { active: false, cooldown: 0 },
+            slow: { active: false, cooldown: 0 },
+            fire: { active: false, cooldown: 0 }
+        };
+
+        function activatePower(power) {
+            if(powerUps[power].cooldown > 0) return;
+
+            // Activate power
+            powerUps[power].active = true;
+            bird[power] = true;
+            document.getElementById(`${power}Btn`).disabled = true;
+
+            // Power duration
+            setTimeout(() => {
+                powerUps[power].active = false;
+                bird[power] = false;
+                powerUps[power].cooldown = 5000; // 5 seconds cooldown
+                
+                setTimeout(() => {
+                    powerUps[power].cooldown = 0;
+                    document.getElementById(`${power}Btn`).disabled = false;
+                }, 5000);
+            }, 3000); // 3 seconds duration
+        }
+
+        function createPipe() {
+            const minHeight = 100;
+            const maxHeight = canvas.height - PIPE_GAP - minHeight;
+            const height = Math.random() * (maxHeight - minHeight) + minHeight;
+            
+            return {
+                x: canvas.width,
+                height: height,
+                counted: false
+            };
+        }
+
+        function drawBird() {
+            ctx.save();
+            ctx.translate(bird.x, bird.y);
+            
+            // Bird rotation
+            let rotation = Math.min(Math.max(bird.velocity * 0.1, -0.5), 0.5);
+            ctx.rotate(rotation);
+
+            // Shield effect
+            if(bird.shield) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(100, 200, 255, 0.5)';
+                ctx.arc(0, 0, bird.radius + 10, 0, Math.PI * 2);
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            // Bird body
+            ctx.fillStyle = bird.fire ? '#ff4400' : '#ffd700';
+            ctx.beginPath();
+            ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Wing
+            ctx.fillStyle = bird.fire ? '#ff7700' : '#ffa500';
+            let wingOffset = Math.sin(Date.now() * 0.01) * 5;
+            ctx.beginPath();
+            ctx.ellipse(-5, wingOffset, 10, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eye
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(8, -5, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(10, -5, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawPipes() {
+            pipes.forEach(pipe => {
+                let pipeSpeed = powerUps.slow.active ? PIPE_SPEED/2 : PIPE_SPEED;
+
+                ctx.fillStyle = '#32CD32';
+                ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.height);
+                ctx.fillRect(pipe.x, pipe.height + PIPE_GAP, PIPE_WIDTH, 
+                           canvas.height - (pipe.height + PIPE_GAP));
+                
+                pipe.x -= pipeSpeed;
+            });
+        }
+
+        function checkCollision() {
+            if(bird.shield) return false;
+
+            return pipes.some(pipe => {
+                if (bird.x + bird.radius > pipe.x && 
+                    bird.x - bird.radius < pipe.x + PIPE_WIDTH) {
+                    if (bird.y - bird.radius < pipe.height || 
+                        bird.y + bird.radius > pipe.height + PIPE_GAP) {
+                        return true;
+                    }
+                }
+                return false;
+            }) || bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0;
+        }
+
+        function updateScore() {
+            pipes.forEach(pipe => {
+                if (!pipe.counted && bird.x > pipe.x + PIPE_WIDTH) {
+                    score++;
+                    pipe.counted = true;
+                }
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 30px Arial';
+            ctx.fillText(`Score: ${score}`, 20, 40);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameActive) {
+                bird.velocity += GRAVITY;
+                bird.y += bird.velocity;
+
+                if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 300) {
+                    pipes.push(createPipe());
+                }
+
+                pipes = pipes.filter(pipe => pipe.x > -PIPE_WIDTH);
+
+                if (checkCollision()) {
+                    gameActive = false;
+                }
+
+                updateScore();
+            }
+
+            drawPipes();
+            drawBird();
+            drawScore();
+
+            if (!gameActive) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 40px Arial';
+                ctx.fillText('Press SPACE to start', canvas.width/2 - 150, canvas.height/2);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', event => {
+            if (event.code === 'Space') {
+                event.preventDefault();
+                if (!gameActive) {
+                    bird.y = 300;
+                    bird.velocity = 0;
+                    pipes = [];
+                    score = 0;
+                    gameActive = true;
+                } else {
+                    bird.velocity = JUMP;
+                }
+            }
+            // Power controls
+            if(gameActive) {
+                if(event.key === 's') activatePower('shield');
+                if(event.key === 'd') activatePower('slow');
+                if(event.key === 'f') activatePower('fire');
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
